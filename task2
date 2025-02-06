@@ -1,0 +1,98 @@
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
+#include <vector>
+#include <thread>
+#include <mutex>
+#include <algorithm>
+
+using namespace std;
+
+mutex word_mutex;  // Mutex for thread-safe access to shared resources
+
+// Function to clean and normalize words
+string normalizeWord(const string& word) {
+    string normalized;
+    for (char c : word) {
+        if (isalpha(c) || c == '\'') {  // Fixed syntax error for apostrophe
+            normalized += tolower(c);
+        }
+    }
+    return normalized;
+}
+
+// Function to count word frequency in a segment
+void calculateWordFrequency(const vector<string>& segment, unordered_map<string, int>& localWordCount) {
+    for (const string& word : segment) {
+        string normalizedWord = normalizeWord(word);
+        if (!normalizedWord.empty()) {
+            localWordCount[normalizedWord]++;
+        }
+    }
+}
+
+// Function executed by each thread
+void processSegment(const vector<string>& segment, unordered_map<string, int>& globalWordCount) {
+    unordered_map<string, int> localWordCount;
+    calculateWordFrequency(segment, localWordCount);
+
+    // Lock before updating shared resource
+    lock_guard<mutex> lock(word_mutex);
+    for (const auto& pair : localWordCount) {
+        globalWordCount[pair.first] += pair.second;
+    }
+}
+
+// Main function to handle file processing
+void analyzeFile(const string& filename, int numThreads) {
+    ifstream file(filename);
+    if (!file) {
+        cerr << "Error opening file: " << filename << endl;
+        return;
+    }
+
+    // Read entire file content into a vector
+    vector<string> words;
+    string word;
+    while (file >> word) {
+        words.push_back(word);
+    }
+
+    file.close();
+    size_t totalWords = words.size();
+    size_t segmentSize = totalWords / numThreads;
+
+    vector<thread> threads;
+    unordered_map<string, int> globalWordCount;
+
+    for (int i = 0; i < numThreads; i++) {
+        // Define segment range
+        size_t start = i * segmentSize;
+        size_t end = (i == numThreads - 1) ? totalWords : (i + 1) * segmentSize;
+        vector<string> segment(words.begin() + start, words.begin() + end);
+
+        // Launch thread
+        threads.emplace_back(processSegment, segment, ref(globalWordCount));
+    }
+
+    // Join all threads
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    // Print final word frequencies
+    cout << "\nFinal Word Frequency Count:\n";
+    for (const auto& pair : globalWordCount) {
+        cout << pair.first << ": " << pair.second << endl;
+    }
+}
+
+// Main function
+int main() {
+    string filename = "input.txt";
+    int numThreads = 4;
+
+    analyzeFile(filename, numThreads);
+    return 0;
+}
