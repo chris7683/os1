@@ -1,100 +1,108 @@
+
 #include <iostream>
 #include <fstream>
 #include <vector>
 
-using namespace std;
+#define MAX_PROCESSES 100
+#define MAX_RESOURCES 100
 
-void readInput(const string& filename, int &numProcesses, int &numResources,
-               vector<int> &E, vector<vector<int>> &C, vector<vector<int>> &R) {
-    ifstream file(filename);
-    if (!file) {
-        cerr << "Error: Unable to open file!" << endl;
-        exit(1);
+void readInputFile(const std::string& filename, int& numProcesses, int& numResourceTypes,
+                   std::vector<int>& E, std::vector<std::vector<int>>& C, std::vector<std::vector<int>>& R) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file" << std::endl;
+        exit(EXIT_FAILURE);
     }
 
-    file >> numProcesses >> numResources;
+    file >> numProcesses;
+    file >> numResourceTypes;
 
-    E.resize(numResources);
-    for (int i = 0; i < numResources; i++)
+    E.resize(numResourceTypes);
+    for (int i = 0; i < numResourceTypes; ++i) {
         file >> E[i];
+    }
 
-    C.assign(numProcesses, vector<int>(numResources));
-    for (int i = 0; i < numProcesses; i++)
-        for (int j = 0; j < numResources; j++)
+    C.resize(numProcesses, std::vector<int>(numResourceTypes));
+    for (int i = 0; i < numProcesses; ++i) {
+        for (int j = 0; j < numResourceTypes; ++j) {
             file >> C[i][j];
+        }
+    }
 
-    R.assign(numProcesses, vector<int>(numResources));
-    for (int i = 0; i < numProcesses; i++)
-        for (int j = 0; j < numResources; j++)
+    R.resize(numProcesses, std::vector<int>(numResourceTypes));
+    for (int i = 0; i < numProcesses; ++i) {
+        for (int j = 0; j < numResourceTypes; ++j) {
             file >> R[i][j];
+        }
+    }
 
     file.close();
 }
 
-bool detectDeadlock(int numProcesses, int numResources, const vector<int>& E,
-                    const vector<vector<int>>& C, const vector<vector<int>>& R) {
-    vector<int> A(numResources, 0);
-    vector<bool> finished(numProcesses, false);
-    
-    // Calculate Available Resources: A = E - sum(C[i])
-    for (int j = 0; j < numResources; j++) {
-        int sumAllocated = 0;
-        for (int i = 0; i < numProcesses; i++)
-            sumAllocated += C[i][j];
-        A[j] = E[j] - sumAllocated;
-    }
-
-    int completedProcesses = 0;
-    bool progress = true;
-
-    while (progress) {
-        progress = false;
-        for (int i = 0; i < numProcesses; i++) {
-            if (!finished[i]) {
-                bool canExecute = true;
-                for (int j = 0; j < numResources; j++) {
-                    if (R[i][j] > A[j]) {
-                        canExecute = false;
-                        break;
-                    }
-                }
-                if (canExecute) {
-                    finished[i] = true;
-                    progress = true;
-                    completedProcesses++;
-                    for (int j = 0; j < numResources; j++)
-                        A[j] += C[i][j]; // Release resources
-                }
-            }
+void calculateAvailableResources(int numProcesses, int numResourceTypes, const std::vector<int>& E,
+                                 const std::vector<std::vector<int>>& C, std::vector<int>& A) {
+    A.resize(numResourceTypes);
+    for (int j = 0; j < numResourceTypes; ++j) {
+        A[j] = E[j];
+        for (int i = 0; i < numProcesses; ++i) {
+            A[j] -= C[i][j];
         }
     }
+}
 
-    // Check for deadlock
+bool isRequestLessThanOrEqual(int numResourceTypes, const std::vector<int>& request, const std::vector<int>& available) {
+    for (int j = 0; j < numResourceTypes; ++j) {
+        if (request[j] > available[j]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void addResources(int numResourceTypes, std::vector<int>& available, const std::vector<int>& allocation) {
+    for (int j = 0; j < numResourceTypes; ++j) {
+        available[j] += allocation[j];
+    }
+}
+
+void deadlockDetection(int numProcesses, int numResourceTypes, const std::vector<std::vector<int>>& C,
+                       const std::vector<std::vector<int>>& R, std::vector<int>& A) {
+    std::vector<bool> finish(numProcesses, false);
     bool deadlock = false;
-    cout << "Deadlock status: ";
-    for (int i = 0; i < numProcesses; i++) {
-        if (!finished[i]) {
-            cout << "P" << i << " ";
-            deadlock = true;
+
+    for (int i = 0; i < numProcesses; ++i) {
+        if (!finish[i] && isRequestLessThanOrEqual(numResourceTypes, R[i], A)) {
+            addResources(numResourceTypes, A, C[i]);
+            finish[i] = true;
+            i = -1; // Restart the process check
         }
     }
 
-    if (deadlock) {
-        cout << "\nDeadlock detected!" << endl;
-        return true;
-    } else {
-        cout << "No deadlock detected." << endl;
-        return false;
+    for (int i = 0; i < numProcesses; ++i) {
+        if (!finish[i]) {
+            deadlock = true;
+            std::cout << "Process " << i << " is deadlocked." << std::endl;
+        }
+    }
+
+    if (!deadlock) {
+        std::cout << "No deadlock detected." << std::endl;
     }
 }
 
 int main() {
-    int numProcesses, numResources;
-    vector<int> E;
-    vector<vector<int>> C, R;
+    int numProcesses, numResourceTypes;
+    std::vector<int> E;
+    std::vector<std::vector<int>> C;
+    std::vector<std::vector<int>> R;
+    std::vector<int> A;
 
-    readInput("input.txt", numProcesses, numResources, E, C, R);
-    detectDeadlock(numProcesses, numResources, E, C, R);
+    readInputFile("input.txt", numProcesses, numResourceTypes, E, C, R);
+    calculateAvailableResources(numProcesses, numResourceTypes, E, C, A);
+    deadlockDetection(numProcesses, numResourceTypes, C, R, A);
 
     return 0;
 }
+
+
+
