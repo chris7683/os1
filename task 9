@@ -1,0 +1,139 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <algorithm>
+#include <queue>
+#include <climits>  // Include this for INT_MAX
+
+using namespace std;
+
+// Structure to represent a process
+struct Process {
+    int pid;           // Process ID
+    int arrivalTime;   // Arrival time
+    int burstTime;     // Burst time
+};
+
+// FCFS Scheduling
+float FCFS(vector<Process> processes) {
+    int n = processes.size();
+    vector<int> waitingTime(n, 0);
+    int currentTime = 0;
+
+    // Sort processes by arrival time
+    sort(processes.begin(), processes.end(), [](Process a, Process b) {
+        return a.arrivalTime < b.arrivalTime;
+    });
+
+    for (int i = 0; i < n; i++) {
+        currentTime = max(currentTime, processes[i].arrivalTime);
+        waitingTime[i] = currentTime - processes[i].arrivalTime;
+        currentTime += processes[i].burstTime;
+    }
+
+    float totalWaitingTime = 0;
+    for (int i = 0; i < n; i++) totalWaitingTime += waitingTime[i];
+
+    return totalWaitingTime / n;
+}
+
+// SJF Scheduling (non-preemptive)
+float SJF(vector<Process> processes) {
+    int n = processes.size();
+    vector<int> waitingTime(n, 0);
+    int completed = 0, currentTime = 0;
+    vector<bool> done(n, false);
+
+    while (completed < n) {
+        int idx = -1;
+        int minBurstTime = INT_MAX;
+
+        for (int i = 0; i < n; i++) {
+            if (!done[i] && processes[i].arrivalTime <= currentTime && processes[i].burstTime < minBurstTime) {
+                minBurstTime = processes[i].burstTime;
+                idx = i;
+            }
+        }
+
+        if (idx != -1) {
+            currentTime += processes[idx].burstTime;
+            waitingTime[idx] = currentTime - processes[idx].arrivalTime - processes[idx].burstTime;
+            done[idx] = true;
+            completed++;
+        } else {
+            currentTime++;
+        }
+    }
+
+    float totalWaitingTime = 0;
+    for (int i = 0; i < n; i++) totalWaitingTime += waitingTime[i];
+
+    return totalWaitingTime / n;
+}
+
+// Round Robin Scheduling
+float RoundRobin(vector<Process> processes, int quantum) {
+    int n = processes.size();
+    vector<int> remainingBurstTime(n);
+    vector<int> waitingTime(n, 0);
+    queue<int> q;
+    int currentTime = 0;
+
+    for (int i = 0; i < n; i++) remainingBurstTime[i] = processes[i].burstTime;
+
+    q.push(0);
+    vector<bool> inQueue(n, false);
+    inQueue[0] = true;
+
+    while (!q.empty()) {
+        int idx = q.front();
+        q.pop();
+
+        int timeSlice = min(quantum, remainingBurstTime[idx]);
+        currentTime += timeSlice;
+        remainingBurstTime[idx] -= timeSlice;
+
+        // Push newly arrived processes into the queue
+        for (int i = 0; i < n; i++) {
+            if (i != idx && !inQueue[i] && processes[i].arrivalTime <= currentTime && remainingBurstTime[i] > 0) {
+                q.push(i);
+                inQueue[i] = true;
+            }
+        }
+
+        if (remainingBurstTime[idx] > 0) {
+            q.push(idx);  // Put current process back into the queue if not done
+        } else {
+            waitingTime[idx] = currentTime - processes[idx].arrivalTime - processes[idx].burstTime;
+        }
+    }
+
+    float totalWaitingTime = 0;
+    for (int i = 0; i < n; i++) totalWaitingTime += waitingTime[i];
+
+    return totalWaitingTime / n;
+}
+
+// Main function
+int main() {
+    ifstream inputFile("chris.txt");
+    if (!inputFile) {
+        cout << "Error: chris.txt not found!" << endl;
+        return 1;
+    }
+
+    vector<Process> processes;
+    int pid = 0, arrival, burst;
+
+    while (inputFile >> arrival >> burst) {
+        processes.push_back({pid++, arrival, burst});
+    }
+
+    inputFile.close();
+
+    cout << "Average Waiting Time (FCFS): " << FCFS(processes) << endl;
+    cout << "Average Waiting Time (SJF): " << SJF(processes) << endl;
+    cout << "Average Waiting Time (Round Robin, Quantum = 2): " << RoundRobin(processes, 2) << endl;
+
+    return 0;
+}
